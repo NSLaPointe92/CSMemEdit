@@ -72,13 +72,19 @@ namespace CSMemEdit
 
         public byte[] ReadProcMem(IntPtr addressToRead, int lengthToRead)
         {
-            if (!Win32.VirtualProtectEx(this.proc, addressToRead, (UIntPtr)lengthToRead, Win32.MemoryProtectionConstants.PAGE_READONLY, out Win32.MemoryProtectionConstants oldProtect))
+            var newProtect = Win32.MemoryProtectionConstants.PAGE_READWRITE;
+            if (!Win32.VirtualProtectEx(this.proc, addressToRead, (UIntPtr)lengthToRead, newProtect, out Win32.MemoryProtectionConstants oldProtect))
                 throw new Exception(string.Format("ERROR: {0}", Marshal.GetLastWin32Error().ToString()));
 
             var buffer = new byte[lengthToRead];
 
             if (!Win32.ReadProcessMemory(this.proc, addressToRead, buffer, lengthToRead, out IntPtr bufferRead))
-                throw new Exception(string.Format("ERROR: {0}",  Marshal.GetLastWin32Error().ToString()));
+                throw new Exception(string.Format("ERROR: {0}", Marshal.GetLastWin32Error().ToString()));
+
+            if (!Win32.VirtualProtectEx(this.proc, addressToRead, (UIntPtr)lengthToRead, oldProtect, out newProtect))
+                throw new Exception(string.Format("ERROR: {0}", Marshal.GetLastWin32Error().ToString()));
+
+            Win32.FlushInstructionCache(this.proc, addressToRead, (UIntPtr)lengthToRead);
 
             return buffer;
         }
@@ -102,6 +108,8 @@ namespace CSMemEdit
 
             if (!Win32.VirtualProtectEx(this.proc, addressToWrite, (UIntPtr)bytesToWrite.Length, oldProtect, out newProtect))
                 return 0;
+
+            Win32.FlushInstructionCache(this.proc, addressToWrite, (UIntPtr)bytesToWrite.Length);
 
             return bufferWritten;
         }
