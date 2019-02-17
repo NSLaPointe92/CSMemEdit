@@ -7,31 +7,31 @@ namespace CSMemEdit
 {
     class Memory
     {
-        private IntPtr proc { get; set; }
+        private IntPtr Proc { get; set; }
 
         public Memory() { }
 
         public Memory(int procId)
         {
-            this.proc = Win32.OpenProcess(Win32.ProcessAccessRights.PROCESS_ALL_ACCESS, false, procId);
-            if (this.proc == IntPtr.Zero)
+            Proc = Win32.OpenProcess(Win32.ProcessAccessRights.PROCESS_ALL_ACCESS, false, procId);
+            if (Proc == IntPtr.Zero)
             {
                 var error = Marshal.GetLastWin32Error();
                 if (error == 5)
-                    throw new Exception(string.Format("ERROR: {0} try running as admin.", error));
+                    throw new Exception(string.Format("ERROR: OpenProcess error {0} try running as admin.", error));
                 else
-                    throw new Exception(string.Format("ERROR: {0}", error));
+                    throw new Exception(string.Format("ERROR: OpenProcess error {0}", error));
             }
         }
 
         ~Memory()
         {
-            Win32.CloseHandle(this.proc);
+            Win32.CloseHandle(this.Proc);
         }
 
         public IntPtr GetProcessHandle()
         {
-            return proc;
+            return Proc;
         }
 
         public IntPtr GetProcessModuleHandle(string moduleName)
@@ -43,7 +43,7 @@ namespace CSMemEdit
 
             var uiSize = (uint)(Marshal.SizeOf(typeof(IntPtr)) * (hMods.Length));
 
-            if (Win32.EnumProcessModules(proc, pModules, uiSize, out uint cbNeeded) == 1)
+            if (Win32.EnumProcessModules(Proc, pModules, uiSize, out uint cbNeeded) == 1)
             {
                 var uiTotalNumberofModules = (Int32)(cbNeeded / (Marshal.SizeOf(typeof(IntPtr))));
 
@@ -51,7 +51,7 @@ namespace CSMemEdit
                 {
                     var stringBuilder = new StringBuilder(1024);
 
-                    Win32.GetModuleFileNameEx(proc, hMods[i], stringBuilder, (uint)(stringBuilder.Capacity));
+                    Win32.GetModuleFileNameEx(Proc, hMods[i], stringBuilder, (uint)(stringBuilder.Capacity));
                     if (Path.GetFileName(stringBuilder.ToString().ToLower()) == moduleName.ToLower())
                         return hMods[i];
                 }
@@ -64,8 +64,8 @@ namespace CSMemEdit
 
         public byte[] ReadProcMem(int procId, IntPtr addressToRead, int lengthToRead)
         {
-            if (this.proc == IntPtr.Zero)
-                this.proc = Win32.OpenProcess(Win32.ProcessAccessRights.PROCESS_ALL_ACCESS, false, procId);
+            if (Proc == IntPtr.Zero)
+                Proc = Win32.OpenProcess(Win32.ProcessAccessRights.PROCESS_ALL_ACCESS, false, procId);
 
             return ReadProcMem(addressToRead, lengthToRead);
         }
@@ -73,26 +73,26 @@ namespace CSMemEdit
         public byte[] ReadProcMem(IntPtr addressToRead, int lengthToRead)
         {
             var newProtect = Win32.MemoryProtectionConstants.PAGE_READWRITE;
-            if (!Win32.VirtualProtectEx(this.proc, addressToRead, (UIntPtr)lengthToRead, newProtect, out Win32.MemoryProtectionConstants oldProtect))
-                throw new Exception(string.Format("ERROR: {0}", Marshal.GetLastWin32Error().ToString()));
+            if (!Win32.VirtualProtectEx(Proc, addressToRead, (UIntPtr)lengthToRead, newProtect, out Win32.MemoryProtectionConstants oldProtect))
+                throw new Exception(string.Format("ERROR: ReadProcMem set VirtualProtectEx error {0}", Marshal.GetLastWin32Error().ToString()));
 
             var buffer = new byte[lengthToRead];
 
-            if (!Win32.ReadProcessMemory(this.proc, addressToRead, buffer, lengthToRead, out IntPtr bufferRead))
-                throw new Exception(string.Format("ERROR: {0}", Marshal.GetLastWin32Error().ToString()));
+            if (!Win32.ReadProcessMemory(Proc, addressToRead, buffer, lengthToRead, out IntPtr bufferRead))
+                throw new Exception(string.Format("ERROR: ReadProcMem ReadProcessMemory error {0}", Marshal.GetLastWin32Error().ToString()));
 
-            if (!Win32.VirtualProtectEx(this.proc, addressToRead, (UIntPtr)lengthToRead, oldProtect, out newProtect))
-                throw new Exception(string.Format("ERROR: {0}", Marshal.GetLastWin32Error().ToString()));
+            if (!Win32.VirtualProtectEx(Proc, addressToRead, (UIntPtr)lengthToRead, oldProtect, out newProtect))
+                throw new Exception(string.Format("ERROR: ReadProcMem unset VirtualProtectEx error {0}", Marshal.GetLastWin32Error().ToString()));
 
-            Win32.FlushInstructionCache(this.proc, addressToRead, (UIntPtr)lengthToRead);
+            Win32.FlushInstructionCache(Proc, addressToRead, (UIntPtr)lengthToRead);
 
             return buffer;
         }
 
         public int WriteProcMem(IntPtr procHandle, IntPtr addressToWrite, byte[] bytesToWrite)
         {
-            if (this.proc == IntPtr.Zero)
-                this.proc = Win32.OpenProcess(Win32.ProcessAccessRights.PROCESS_ALL_ACCESS, false, procHandle.ToInt32());
+            if (Proc == IntPtr.Zero)
+                Proc = Win32.OpenProcess(Win32.ProcessAccessRights.PROCESS_ALL_ACCESS, false, procHandle.ToInt32());
 
             return WriteProcMem(addressToWrite, bytesToWrite);
         }
@@ -100,18 +100,47 @@ namespace CSMemEdit
         public int WriteProcMem(IntPtr addressToWrite, byte[] bytesToWrite)
         {
             var newProtect = Win32.MemoryProtectionConstants.PAGE_READWRITE;
-            if (!Win32.VirtualProtectEx(this.proc, addressToWrite, (UIntPtr)bytesToWrite.Length, newProtect, out Win32.MemoryProtectionConstants oldProtect))
-                return 0;
+            if (!Win32.VirtualProtectEx(Proc, addressToWrite, (UIntPtr)bytesToWrite.Length, newProtect, out Win32.MemoryProtectionConstants oldProtect))
+                throw new Exception(string.Format("ERROR: WriteProcMem set VirtualProtectEx error {0}", Marshal.GetLastWin32Error().ToString()));
 
-            if (!Win32.WriteProcessMemory(this.proc, addressToWrite, bytesToWrite, bytesToWrite.Length, out int bufferWritten))
-                return 0;
+            if (!Win32.WriteProcessMemory(Proc, addressToWrite, bytesToWrite, bytesToWrite.Length, out int bufferWritten))
+                throw new Exception(string.Format("ERROR: WriteProcMem WriteProcessMemory error {0}", Marshal.GetLastWin32Error().ToString()));
 
-            if (!Win32.VirtualProtectEx(this.proc, addressToWrite, (UIntPtr)bytesToWrite.Length, oldProtect, out newProtect))
-                return 0;
+            if (!Win32.VirtualProtectEx(Proc, addressToWrite, (UIntPtr)bytesToWrite.Length, oldProtect, out newProtect))
+                throw new Exception(string.Format("ERROR: WriteProcMem unset VirtualProtectEx error {0}", Marshal.GetLastWin32Error().ToString()));
 
-            Win32.FlushInstructionCache(this.proc, addressToWrite, (UIntPtr)bytesToWrite.Length);
+            Win32.FlushInstructionCache(Proc, addressToWrite, (UIntPtr)bytesToWrite.Length);
 
             return bufferWritten;
+        }
+
+        public IntPtr QuickSearch(uint lowerAddress, uint upperAddress, byte[] searchPattern)
+        {
+            uint addr = 0;
+
+            for (var i = lowerAddress; i < upperAddress; ++i)
+            {
+                var found = true;
+                for (var x = 0; x < searchPattern.Length; ++x)
+                {
+                    var read = ReadProcMem((IntPtr)i + x, 1);
+                    if ((searchPattern[x] & 0xFF00) > 0)
+                        continue;
+
+                    if (read[0] != (searchPattern[x] & 0x00FF))
+                    {
+                        found = false;
+                        break;
+                    }
+                }
+                if (found)
+                {
+                    addr = i;
+                    break;
+                }
+            }
+
+            return (IntPtr)addr;
         }
     }
 }
