@@ -114,7 +114,7 @@ namespace CSMemEdit
             return bufferWritten;
         }
 
-        public IntPtr QuickSearch(uint lowerAddress, uint upperAddress, byte[] searchPattern)
+        public IntPtr QuickSearch(uint lowerAddress, uint upperAddress, short[] searchPattern)
         {
             uint addr = 0;
 
