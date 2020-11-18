@@ -142,5 +142,45 @@ namespace CSMemEdit
 
             return (IntPtr)addr;
         }
+        
+        private byte[] ReadProcMemNoProtection(IntPtr addressToRead, int lengthToRead)
+        {
+            var buffer = new byte[lengthToRead];
+
+            if (!Win32.ReadProcessMemory(Proc, addressToRead, buffer, lengthToRead, out IntPtr bufferRead))
+                throw new Exception(string.Format("ERROR: ReadProcMemNoProtection ReadProcessMemory error {0}", Marshal.GetLastWin32Error().ToString()));
+
+            return buffer;
+        }
+
+        // Protection change is not always needed to read memory, this will be much quicker if that's the case.
+        public IntPtr QuickSearchNoProtection(uint lowerAddress, uint upperAddress, short[] searchPattern)
+        {
+            uint addr = 0;
+
+            for (var i = lowerAddress; i < upperAddress; ++i)
+            {
+                var found = true;
+                for (var x = 0; x < searchPattern.Length; ++x)
+                {
+                    var read = ReadProcMemNoProtection((IntPtr)i + x, 1);
+                    if ((searchPattern[x] & 0xFF00) > 0)
+                        continue;
+
+                    if (read[0] != (searchPattern[x] & 0x00FF))
+                    {
+                        found = false;
+                        break;
+                    }
+                }
+                if (found)
+                {
+                    addr = i;
+                    break;
+                }
+            }
+
+            return (IntPtr)addr;
+        }
     }
 }
